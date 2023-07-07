@@ -142,7 +142,7 @@ def preprocess_point_cloud(pcd, voxel_size):
 
 def execute_global_registration(source_down, target_down, source_fpfh,
                                 target_fpfh, voxel_size):
-    distance_threshold = voxel_size * 1.5
+    distance_threshold = voxel_size * 1
     print(":: RANSAC registration on downsampled point clouds.")
     print("   Since the downsampling voxel size is %.3f," % voxel_size)
     print("   we use a liberal distance threshold %.3f." % distance_threshold)
@@ -155,11 +155,11 @@ def execute_global_registration(source_down, target_down, source_fpfh,
                 0.9),
             o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(
                 distance_threshold)
-        ], o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999))
+        ], o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 100))
     return result
 
 def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size,transformation):
-    distance_threshold = voxel_size * 0.4
+    distance_threshold = voxel_size * 1.0
     print(":: Point-to-plane ICP registration is applied on original point")
     print("   clouds to refine the alignment. This time we use a strict")
     print("   distance threshold %.3f." % distance_threshold)
@@ -184,8 +184,8 @@ if __name__ == '__main__':
     voxel_size = resolution
     trans_init = np.identity(4)
 
-    source_file = "/home/joeclin/farobot_dev_env/data/far_app_data/app_map/AUO.png"
-    target_file = "/home/joeclin/farobot_dev_env/data/far_app_data/app_map/AUO.png"
+    source_file = "/home/joeclin/farobot_dev_env/data/far_app_data/app_map/ADLink_B3F.png"
+    target_file = "/home/joeclin/farobot_dev_env/data/far_app_data/app_map/ADLink_Final_1.png"
 
     source_points = convert_img_to_points(source_file,resolution)
     target_points = convert_img_to_points(target_file,resolution)
@@ -213,20 +213,28 @@ if __name__ == '__main__':
                                             voxel_size)
     print(result_ransac)
     draw_registration_result(source_down, target_down, result_ransac.transformation)
+    transformation = np.array([[1,0,0,2.0],
+                               [0,1,0,8.1],
+                               [0,0,1,0],
+                               [0,0,0,1],])
     print(result_ransac.transformation)
-
 
     source_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
     target_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
 
     result_icp = refine_registration(source_down, target_down, source_fpfh, target_fpfh,
-                                 voxel_size,result_ransac.transformation)
+                                 voxel_size,transformation)
+                                #  voxel_size,result_ransac.transformation)
     print(result_icp)
     print(result_icp.transformation)
+
     draw_registration_result(source_pcd, target_pcd, result_icp.transformation)
 
+    # res_source_points = np.asarray(source_pcd.transform(result_icp.transformation).points)
+    target_source_points = np.asarray(target_pcd.points)
     res_source_points = np.asarray(source_pcd.transform(result_icp.transformation).points)
 
+    # source_kd = KDTree()
     threshold = 245
     # imitate getying base64 format
     read_img = cv2.imread(target_file, cv2.IMREAD_GRAYSCALE)
@@ -254,6 +262,8 @@ if __name__ == '__main__':
     cv2.imshow('Res_img', gray_canvas_show.astype('uint8'))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+
 
     gray_three_channel = cv2.cvtColor(gray_canvas.astype('uint8'), cv2.COLOR_GRAY2BGR)
     im_b64 = base64.b64encode(cv2.imencode('.png', gray_three_channel)[1])
